@@ -308,13 +308,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Project Maintainer:** Sathyaseelan 
 **Email:** ksathyaseelan34@gmail.com
-**GitHub:** [@yourusername](https://github.com/sathyaseelan2006)
+**GitHub:** [Sathyaseelan](https://github.com/sathyaseelan2006)
 
 ---
 
 <div align="center">
 
-**Made with ❤️ by [Your Name]**
 
 ⭐ Star this repo if you find it useful!
 
