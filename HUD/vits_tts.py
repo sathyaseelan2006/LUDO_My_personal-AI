@@ -31,13 +31,29 @@ class VITSTTSEngine:
         """Initialize Piper voice model (auto-downloads on first use)"""
         try:
             print(f"🔄 Loading VITS voice model: {self.model_name}...")
+            
+            # Check if model files exist in common locations
+            model_paths = [
+                f"{self.model_name}.onnx",
+                f"models/{self.model_name}.onnx",
+                os.path.expanduser(f"~/.local/share/piper-tts/voices/{self.model_name}.onnx")
+            ]
+            
+            # Try to load the voice
             self.voice = PiperVoice.load(self.model_name)
             self.initialized = True
             print(f"✅ VITS TTS initialized with {self.model_name}")
             return True
+        except FileNotFoundError as e:
+            print(f"⚠️ VITS model not found: {self.model_name}")
+            print(f"💡 To use VITS TTS, download the model from:")
+            print(f"   https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/lessac/medium")
+            print(f"   Place .onnx and .json files in the HUD directory")
+            print(f"🔄 Falling back to basic TTS...")
+            return False
         except Exception as e:
             print(f"❌ VITS TTS initialization failed: {e}")
-            print("💡 Tip: First run downloads the model (~30MB)")
+            print(f"🔄 Falling back to basic TTS...")
             return False
     
     def speak(self, text, rate=1.0):

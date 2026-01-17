@@ -9,7 +9,7 @@ import os
 import cv2
 import mediapipe as mp
 import numpy as np
-import google.generativeai as genai
+import google.genai as genai
 import speech_recognition as sr
 import pyttsx3
 import json
@@ -37,15 +37,18 @@ if not GEMINI_API_KEY:
     print("See .env.example for template.")
 
 try:
-    # Configure Gemini API
+    # Configure Gemini API (new SDK)
     if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         gemini_enabled = True
+        print("✅ Gemini API initialized (google.genai SDK)")
     else:
+        gemini_client = None
         gemini_enabled = False
         print("❌ Gemini API disabled - no API key provided")
 except Exception as e:
     print(f"Gemini initialization failed: {e}")
+    gemini_client = None
     gemini_enabled = False
 
 # Voice Assistant Configuration
@@ -132,7 +135,8 @@ font_path = r'E:\brainstroming\AI_Miles\HUD\Orbitron-VariableFont_wght.ttf'
 clock_font = pygame.font.Font(font_path, 80)
 calendar_font = pygame.font.Font(font_path, 20)
 description_font = pygame.font.Font(None, 18)  # Use default pygame font for proper case
-chat_font = pygame.font.Font(None, 18)  # Separate font for chat messages
+# Use Segoe UI Emoji for chat to support emojis and special characters
+chat_font = pygame.font.SysFont("Segoe UI Emoji", 20)  # Supports emojis
 
 track_font = pygame.font.SysFont("SF Mono", 18)
 
@@ -748,9 +752,11 @@ def get_gemini_response(query):
         final_tokens = estimate_tokens(full_conversation)
         print(f"🎯 Sending {final_tokens} tokens to API")
         
-        # Send to Gemini
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        response = model.generate_content(full_conversation)
+        # Send to Gemini (new SDK - using Gemini 2.5 Flash for best price-performance)
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=full_conversation
+        )
         
         assistant_response = response.text
         
@@ -806,9 +812,12 @@ def speak_response_azure(text, emotion=None):
     try:
         import azure.cognitiveservices.speech as speechsdk
         
+        # Clean markdown formatting before speaking
+        clean_text = clean_text_for_speech(text)
+        
         # Detect emotion if not provided
         if emotion is None:
-            emotion = detect_emotion(text)
+            emotion = detect_emotion(clean_text)
         
         # Configure Azure Speech
         speech_config = speechsdk.SpeechConfig(
@@ -826,7 +835,7 @@ def speak_response_azure(text, emotion=None):
             <voice name="{AZURE_VOICE_NAME}">
                 <mstts:express-as style="{emotion}">
                     <prosody rate="{AZURE_SPEAKING_RATE}" pitch="{AZURE_PITCH}">
-                        {text}
+                        {clean_text}
                     </prosody>
                 </mstts:express-as>
             </voice>
@@ -862,9 +871,31 @@ def speak_response_azure(text, emotion=None):
         # Fallback to basic TTS
         speak_response_basic(text)
 
+def clean_text_for_speech(text):
+    """Remove markdown formatting and special characters for cleaner TTS"""
+    import re
+    
+    # Remove markdown formatting
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # Bold **text**
+    text = re.sub(r'\*(.+?)\*', r'\1', text)      # Italic *text*
+    text = re.sub(r'__(.+?)__', r'\1', text)      # Bold __text__
+    text = re.sub(r'_(.+?)_', r'\1', text)        # Italic _text_
+    text = re.sub(r'`(.+?)`', r'\1', text)        # Code `text`
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)  # Code blocks
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)  # Links [text](url)
+    text = re.sub(r'#{1,6}\s', '', text)          # Headers
+    text = re.sub(r'[•\-\*]\s', '', text)         # Bullet points
+    text = re.sub(r'\n+', ' ', text)              # Multiple newlines
+    text = re.sub(r'\s+', ' ', text)              # Multiple spaces
+    
+    return text.strip()
+
 def speak_response_basic(text):
     """Convert text to speech using basic pyttsx3 (fallback)"""
     try:
+        # Clean markdown formatting before speaking
+        clean_text = clean_text_for_speech(text)
+        
         engine = pyttsx3.init()
         
         # Voice customization options
@@ -878,7 +909,7 @@ def speak_response_basic(text):
         engine.setProperty('rate', VOICE_RATE)
         engine.setProperty('volume', VOICE_VOLUME)
         
-        engine.say(text)
+        engine.say(clean_text)
         engine.runAndWait()
     except Exception as e:
         print(f"Text-to-speech error: {e}")
@@ -946,9 +977,22 @@ def hand_tracking_thread():
     global hand_landmarks_global, hand_closed_global, wrist_screen_pos
 
     try:
-        mp_hands = mp.solutions.hands
-        hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.6, min_tracking_confidence=0.6)
-        cap = cv2.VideoCapture(0)  # Default Windows webcam
+        # Try new mediapipe API first
+        try:
+            from mediapipe.tasks import python
+            from mediapipe.tasks.python import vision
+            # New API - requires different setup, disable for now
+            print("⚠️ Hand tracking disabled: New MediaPipe API detected, requires code update")
+            return
+        except (ImportError, AttributeError):
+            # Fall back to old API
+            try:
+                mp_hands = mp.solutions.hands
+                hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.6, min_tracking_confidence=0.6)
+                cap = cv2.VideoCapture(0)  # Default Windows webcam
+            except AttributeError:
+                print("⚠️ Hand tracking disabled: MediaPipe version incompatible")
+                return
     except Exception as e:
         print(f"Hand tracking initialization failed: {e}")
         return
